@@ -1,0 +1,164 @@
+# ZCU102 BSP Test Framework Configuration
+# This configuration file defines the hardware setup, test parameters, and acceptance
+# criteria for the automated validation framework. All values should be customized
+# for your specific test lab environment.
+
+# Hardware Configuration
+hardware:
+  # Serial console configuration
+  serial:
+    port: "/dev/ttyUSB0"  # Update for your USB-to-Serial adapter
+    baud_rate: 115200
+    timeout_seconds: 10
+    read_timeout_seconds: 1
+    
+  # Network configuration for Ethernet testing  
+  network:
+    target_ip: "192.168.1.100"  # Static IP assigned to DUT
+    test_host_ip: "192.168.1.10"
+    subnet_mask: "255.255.255.0"
+    gateway: "192.168.1.1"
+    interface: "eth0"
+    
+  # Power control configuration
+  power:
+    controller_type: "smart_plug"  # Options: smart_plug, relay_board, manual
+    device_id: "zcu102_board_1"
+    ip_address: "192.168.1.200"  # For network-controlled power outlets
+    cycle_delay_seconds: 5
+    
+  # JTAG configuration for recovery operations
+  jtag:
+    cable_type: "digilent_hs2"  # Xilinx platform cable or Digilent
+    device_part: "xczu9eg"
+    chain_position: 1
+    vivado_path: "/opt/Xilinx/Vivado/2023.1/bin/vivado"
+
+# Test Suite Configuration
+test_suites:
+  smoke:
+    description: "Quick validation of core functionality"
+    tests:
+      - boot_sequence
+      - uart_basic
+      - network_ping
+    timeout_minutes: 15
+    
+  regression:
+    description: "Comprehensive validation covering all major features"
+    tests:
+      - boot_sequence
+      - uart_comprehensive
+      - network_performance
+      - gpio_loopback
+      - i2c_device_scan
+      - system_stability
+    timeout_minutes: 60
+    
+  full:
+    description: "Extended validation including stress and longevity tests"
+    tests:
+      - boot_sequence
+      - uart_comprehensive
+      - network_performance
+      - gpio_loopback
+      - i2c_device_scan
+      - spi_device_test
+      - system_stress
+      - power_cycle_endurance
+    timeout_minutes: 240
+
+# Test Acceptance Criteria
+acceptance_criteria:
+  boot:
+    max_boot_time_seconds: 45
+    required_boot_messages:
+      - "U-Boot 202"
+      - "Linux version"
+      - "login:"
+    forbidden_boot_messages:
+      - "kernel panic"
+      - "Out of memory"
+      - "segfault"
+      
+  performance:
+    min_ethernet_throughput_mbps: 900  # For Gigabit Ethernet
+    max_ping_latency_ms: 2
+    max_boot_time_variance_seconds: 5
+    
+  stability:
+    min_uptime_hours: 24
+    max_memory_usage_percent: 80
+    max_cpu_temperature_celsius: 75
+    
+  gpio:
+    signal_rise_time_us: 1.0
+    signal_fall_time_us: 1.0
+    
+# Hardware Test Fixtures
+fixtures:
+  gpio_loopback:
+    enabled: true
+    output_pins: [54, 55, 56, 57]  # MIO pins for GPIO output
+    input_pins: [58, 59, 60, 61]   # MIO pins for GPIO input
+    
+  i2c_devices:
+    enabled: true
+    bus_number: 1
+    expected_devices:
+      - address: 0x50  # EEPROM
+        device_id: "24c32"
+      - address: 0x68  # RTC
+        device_id: "ds1307"
+        
+  spi_devices:
+    enabled: false  # Enable when SPI test fixture is available
+    bus_number: 0
+    chip_select: 0
+    max_speed_hz: 1000000
+
+# Reporting and Observability
+reporting:
+  # Prometheus metrics endpoint
+  prometheus:
+    pushgateway_url: "http://prometheus-pushgateway:9091"
+    job_name: "zcu102_hardware_tests"
+    
+  # Elasticsearch logging
+  elasticsearch:
+    enabled: true
+    hosts: ["elasticsearch:9200"]
+    index_prefix: "zcu102-test-logs"
+    
+  # S3 artifact storage
+  s3_storage:
+    enabled: true
+    bucket_name: "zcu102-test-artifacts"
+    region: "us-west-2"
+    prefix: "test_results"
+    
+  # Local logging
+  local_logs:
+    directory: "/var/log/zcu102-tests"
+    max_size_mb: 100
+    retention_days: 30
+
+# Development and Debugging Options
+development:
+  # Enable verbose logging for troubleshooting
+  verbose_logging: false
+  
+  # Skip hardware-dependent tests during framework development  
+  mock_hardware: false
+  
+  # Capture additional debug information
+  capture_console_screenshots: true
+  capture_full_uart_log: true
+  
+  # Test execution options
+  fail_fast: false
+  parallel_execution: false
+  
+# Environment Variables Override
+# These can be overridden by setting environment variables with the prefix "ZCU102_TEST_"
+# Example: ZCU102_TEST_SERIAL_PORT=/dev/ttyUSB1

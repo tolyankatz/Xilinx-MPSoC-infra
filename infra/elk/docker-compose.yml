@@ -1,0 +1,215 @@
+# ELK Stack Docker Compose Configuration for ZCU102 Test Framework
+#
+# This compose file sets up a complete ELK (Elasticsearch, Logstash, Kibana) stack
+# for centralized logging and analytics of ZCU102 test execution data.
+#
+# The stack provides:
+# - Elasticsearch: Document storage and search engine
+# - Logstash: Log processing and enrichment pipeline
+# - Kibana: Data visualization and dashboards
+# - Beats: Log shipping agents (filebeat configuration included)
+#
+# This supports the "glass box" philosophy by enabling deep analysis of test
+# execution logs and metrics for continuous improvement.
+
+version: '3.8'
+
+services:
+  # Elasticsearch - Document store and search engine
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
+    container_name: zcu102-elasticsearch
+    hostname: elasticsearch
+    restart: unless-stopped
+    environment:
+      - node.name=zcu102-elasticsearch
+      - cluster.name=zcu102-test-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elk-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Logstash - Log processing pipeline
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.10.2
+    container_name: zcu102-logstash
+    hostname: logstash
+    restart: unless-stopped
+    environment:
+      - "LS_JAVA_OPTS=-Xmx512m -Xms512m"
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - logstash_data:/usr/share/logstash/data
+    ports:
+      - "5044:5044"   # Beats input
+      - "5000:5000"   # TCP input
+      - "9600:9600"   # Logstash monitoring
+    networks:
+      - elk-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9600 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Kibana - Data visualization and dashboards
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.10.2
+    container_name: zcu102-kibana
+    hostname: kibana
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=zcu102-kibana
+      - SERVER_HOST=0.0.0.0
+      - LOGGING_ROOT_LEVEL=warn
+    volumes:
+      - ./kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+      - kibana_data:/usr/share/kibana/data
+    ports:
+      - "5601:5601"
+    networks:
+      - elk-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Filebeat - Log shipper for file-based logs
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.10.2
+    container_name: zcu102-filebeat
+    hostname: filebeat
+    restart: unless-stopped
+    user: root
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - LOGSTASH_HOSTS=logstash:5044
+    volumes:
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - filebeat_data:/usr/share/filebeat/data
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount test log directories
+      - ../test_logs:/test_logs:ro
+    networks:
+      - elk-network
+    depends_on:
+      logstash:
+        condition: service_healthy
+    command: filebeat -e -strict.perms=false
+
+  # Metricbeat - System metrics collection
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.10.2
+    container_name: zcu102-metricbeat
+    hostname: metricbeat
+    restart: unless-stopped
+    user: root
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    volumes:
+      - ./metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - metricbeat_data:/usr/share/metricbeat/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+      - /proc:/hostfs/proc:ro
+      - /:/hostfs:ro
+    networks:
+      - elk-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    command: metricbeat -e -system.hostfs=/hostfs -strict.perms=false
+
+# Named volumes for persistent data
+volumes:
+  elasticsearch_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/elasticsearch
+  logstash_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/logstash
+  kibana_data:
+    driver: local
+    driver_opts:
+      type: none  
+      o: bind
+      device: ./data/kibana
+  filebeat_data:
+    driver: local
+  metricbeat_data:
+    driver: local
+
+# Custom network for ELK communication
+networks:
+  elk-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Usage instructions in comments:
+#
+# Start the ELK stack:
+#   docker-compose up -d
+#
+# View logs:
+#   docker-compose logs -f [service_name]
+#
+# Stop the stack:
+#   docker-compose down
+#
+# Clean up data (WARNING: destroys all data):
+#   docker-compose down -v
+#   sudo rm -rf data/
+#
+# Access points:
+#   - Elasticsearch: http://localhost:9200
+#   - Kibana: http://localhost:5601
+#   - Logstash monitoring: http://localhost:9600
+#
+# Scaling:
+#   - For production, increase memory limits
+#   - Configure proper authentication
+#   - Set up data retention policies
+#   - Consider multi-node deployment

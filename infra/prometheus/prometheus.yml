@@ -1,0 +1,197 @@
+# Prometheus Configuration for ZCU102 Test Framework
+#
+# This configuration defines the Prometheus monitoring setup for collecting
+# metrics from the ZCU102 test framework. It includes scrape targets for
+# test metrics, system monitoring, and infrastructure components.
+#
+# The configuration supports the "glass box" philosophy by providing
+# comprehensive metrics collection and monitoring capabilities.
+
+global:
+  # How frequently to scrape targets by default
+  scrape_interval: 15s
+  
+  # How long until a scrape request times out  
+  scrape_timeout: 10s
+  
+  # How frequently to evaluate rules
+  evaluation_interval: 15s
+  
+  # External labels to add to all metrics
+  external_labels:
+    monitor: 'zcu102-test-monitor'
+    environment: 'test_lab'
+    project: 'zcu102_bsp_validation'
+
+# Rule files specify a list of files from which rules are read
+rule_files:
+  - "alert_rules.yml"
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Scrape configuration for different targets
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Pushgateway for batch job metrics from test framework
+  - job_name: 'pushgateway'
+    static_configs:
+      - targets: ['pushgateway:9091']
+    scrape_interval: 15s
+    honor_labels: true
+    metrics_path: /metrics
+
+  # Node exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    
+  # Docker container metrics
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Jenkins metrics (if Jenkins Prometheus plugin is enabled)
+  - job_name: 'jenkins'
+    static_configs:
+      - targets: ['jenkins:8080']
+    scrape_interval: 60s
+    metrics_path: /prometheus
+    scrape_timeout: 30s
+
+  # Elasticsearch metrics
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+    scrape_interval: 30s
+    metrics_path: /_prometheus/metrics
+    scrape_timeout: 10s
+
+  # Test host metrics (when test framework exposes metrics endpoint)
+  - job_name: 'zcu102-test-host'
+    static_configs:
+      - targets: ['test-host:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  # ZCU102 board metrics (if board exposes metrics via network)
+  - job_name: 'zcu102-boards'
+    static_configs:
+      - targets: 
+          - 'zcu102-board-1:9100'
+          - 'zcu102-board-2:9100'
+    scrape_interval: 30s
+    metrics_path: /metrics
+    scrape_timeout: 5s
+    # Relabel to add board identification
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: board_id
+        replacement: '${1}'
+
+  # HTTP probes for service availability monitoring
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://jenkins:8080
+          - http://kibana:5601
+          - http://prometheus:9090
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ICMP probes for network connectivity monitoring
+  - job_name: 'blackbox-icmp'
+    metrics_path: /probe
+    params:
+      module: [icmp]
+    static_configs:
+      - targets:
+          - 192.168.1.100  # ZCU102 board IP
+          - 192.168.1.10   # Test host IP
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Custom service discovery for dynamic board detection
+  - job_name: 'zcu102-discovery'
+    file_sd_configs:
+      - files:
+          - 'discovered_boards.json'
+        refresh_interval: 60s
+    relabel_configs:
+      - source_labels: [__meta_board_type]
+        target_label: board_type
+      - source_labels: [__meta_board_location]
+        target_label: lab_location
+      - source_labels: [__meta_test_status]
+        target_label: test_status
+
+# Remote write configuration for long-term storage
+# Uncomment and configure for production use
+# remote_write:
+#   - url: "https://prometheus-remote-storage.example.com/api/v1/write"
+#     basic_auth:
+#       username: monitoring
+#       password_file: /etc/prometheus/remote_write_password
+
+# Remote read configuration for federated setups
+# remote_read:
+#   - url: "https://prometheus-remote-storage.example.com/api/v1/read"
+
+# Storage configuration
+storage:
+  tsdb:
+    # Data retention period
+    retention.time: 30d
+    
+    # Maximum size of storage
+    retention.size: 10GB
+    
+    # Compression settings
+    wal-compression: true
+
+# Web console configuration  
+web:
+  # Enable admin API for remote management
+  enable-admin-api: true
+  
+  # Console templates and libraries
+  console.templates: 'consoles'
+  console.libraries: 'console_libraries'
+  
+  # CORS settings for Grafana integration
+  cors.origin: '.*'
+
+# Feature flags
+feature_flags:
+  # Enable new features
+  - promql-at-modifier
+  - expand-external-labels

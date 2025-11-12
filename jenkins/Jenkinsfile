@@ -1,0 +1,360 @@
+/**
+ * ZCU102 BSP Validation Pipeline
+ * 
+ * This declarative Jenkins pipeline implements the complete build-and-test workflow
+ * for the ZCU102 embedded Linux BSP. It orchestrates the full lifecycle from source
+ * code to hardware validation, embodying the "glass box" philosophy of complete
+ * visibility and traceability.
+ * 
+ * Pipeline Flow:
+ * 1. Checkout source code and test framework
+ * 2. Build BSP artifacts in containerized environment
+ * 3. Publish versioned artifacts to JFrog Artifactory
+ * 4. Generate deployment manifest with full traceability
+ * 5. Trigger hardware test execution
+ * 6. Aggregate and report results across all stakeholders
+ */
+
+pipeline {
+    agent {
+        docker {
+            image 'zcu102-petalinux-builder:latest'
+            args '--privileged -v /dev:/dev -v /opt/Xilinx:/opt/Xilinx:ro'
+            label 'docker-enabled'
+        }
+    }
+    
+    parameters {
+        choice(
+            name: 'TARGET_BOARD',
+            choices: ['zcu102', 'zcu104', 'zcu106'],
+            description: 'Target development board for BSP build'
+        )
+        choice(
+            name: 'TEST_SUITE',
+            choices: ['smoke', 'regression', 'full', 'custom'],
+            description: 'Test suite scope to execute on hardware'
+        )
+        string(
+            name: 'BSP_BRANCH',
+            defaultValue: 'main',
+            description: 'BSP source branch to build and test'
+        )
+        booleanParam(
+            name: 'SKIP_HARDWARE_TEST',
+            defaultValue: false,
+            description: 'Skip hardware testing (build-only mode)'
+        )
+    }
+    
+    environment {
+        // Artifact versioning with full traceability
+        BUILD_VERSION = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(8)}"
+        ARTIFACTORY_SERVER = 'artifactory.company.com'
+        ARTIFACTORY_REPO = 'zcu102-bsp-releases'
+        
+        // Test configuration
+        TEST_HOST_LABEL = 'zcu102-test-lab'
+        DEPLOYMENT_MANIFEST = "deployment_manifest_${BUILD_VERSION}.yaml"
+        
+        // Notification channels
+        SLACK_CHANNEL = '#embedded-ci-alerts'
+        TEAMS_WEBHOOK = credentials('teams-webhook-url')
+    }
+    
+    stages {
+        stage('Checkout & Environment Setup') {
+            steps {
+                script {
+                    echo "🚀 Starting ZCU102 BSP build pipeline"
+                    echo "Target Board: ${params.TARGET_BOARD}"
+                    echo "Test Suite: ${params.TEST_SUITE}"
+                    echo "Build Version: ${env.BUILD_VERSION}"
+                }
+                
+                // Checkout the BSP source code
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${params.BSP_BRANCH}"]],
+                    userRemoteConfigs: [[
+                        url: 'https://git.company.com/embedded/zcu102-bsp.git',
+                        credentialsId: 'git-credentials'
+                    ]]
+                ])
+                
+                // Verify PetaLinux environment
+                sh '''
+                    echo "Verifying PetaLinux SDK environment..."
+                    source /opt/Xilinx/PetaLinux/settings.sh
+                    which petalinux-build
+                    petalinux-util --version
+                '''
+            }
+        }
+        
+        stage('BSP Build & Compilation') {
+            steps {
+                script {
+                    echo "🔨 Building BSP for ${params.TARGET_BOARD}"
+                }
+                
+                sh '''
+                    set -e  # Exit on any command failure
+                    
+                    # Source PetaLinux environment
+                    source /opt/Xilinx/PetaLinux/settings.sh
+                    
+                    # Configure build for target board
+                    echo "Configuring PetaLinux project for ${TARGET_BOARD}..."
+                    petalinux-config --get-hw-description=hardware/${TARGET_BOARD}.xsa --silentconfig
+                    
+                    # Execute full BSP build
+                    echo "Starting BSP compilation..."
+                    petalinux-build
+                    
+                    # Package boot artifacts
+                    echo "Packaging boot components..."
+                    petalinux-package --boot --format BIN --fsbl images/linux/zynqmp_fsbl.elf \\
+                        --u-boot images/linux/u-boot.elf \\
+                        --pmufw images/linux/pmufw.elf \\
+                        --fpga images/linux/*.bit \\
+                        --force
+                    
+                    # Verify critical artifacts were generated
+                    echo "Verifying build artifacts..."
+                    ls -la images/linux/BOOT.BIN
+                    ls -la images/linux/image.ub  
+                    ls -la images/linux/rootfs.tar.gz
+                '''
+                
+                // Parse build logs for quality metrics and warnings
+                sh 'bash jenkins/scripts/parse_build_log.sh build.log > build_metrics.json'
+                
+                // Archive build artifacts for debugging
+                archiveArtifacts artifacts: 'images/linux/*', allowEmptyArchive: false
+                archiveArtifacts artifacts: 'build_metrics.json', allowEmptyArchive: true
+            }
+            
+            post {
+                failure {
+                    echo "❌ BSP build failed - capturing diagnostic information"
+                    sh '''
+                        echo "Build environment diagnostics:"
+                        df -h
+                        free -m
+                        tail -100 build/build.log || true
+                    '''
+                }
+            }
+        }
+        
+        stage('Artifact Publishing') {
+            when {
+                expression { currentBuild.result != 'FAILURE' }
+            }
+            steps {
+                script {
+                    echo "📦 Publishing artifacts to JFrog Artifactory"
+                }
+                
+                // Generate checksums for artifact integrity validation
+                sh '''
+                    cd images/linux
+                    sha256sum BOOT.BIN > BOOT.BIN.sha256
+                    sha256sum image.ub > image.ub.sha256
+                    sha256sum rootfs.tar.gz > rootfs.tar.gz.sha256
+                '''
+                
+                // Upload to Artifactory with structured naming
+                rtUpload (
+                    serverId: 'artifactory-server',
+                    spec: """{
+                        "files": [
+                            {
+                                "pattern": "images/linux/BOOT.BIN",
+                                "target": "${ARTIFACTORY_REPO}/${TARGET_BOARD}/${BUILD_VERSION}/BOOT.BIN"
+                            },
+                            {
+                                "pattern": "images/linux/image.ub", 
+                                "target": "${ARTIFACTORY_REPO}/${TARGET_BOARD}/${BUILD_VERSION}/image.ub"
+                            },
+                            {
+                                "pattern": "images/linux/rootfs.tar.gz",
+                                "target": "${ARTIFACTORY_REPO}/${TARGET_BOARD}/${BUILD_VERSION}/rootfs.tar.gz"
+                            },
+                            {
+                                "pattern": "images/linux/*.sha256",
+                                "target": "${ARTIFACTORY_REPO}/${TARGET_BOARD}/${BUILD_VERSION}/"
+                            }
+                        ]
+                    }"""
+                )
+                
+                echo "✅ Artifacts published successfully to ${ARTIFACTORY_REPO}/${TARGET_BOARD}/${BUILD_VERSION}/"
+            }
+        }
+        
+        stage('Generate Deployment Manifest') {
+            steps {
+                script {
+                    echo "📋 Generating deployment manifest with full traceability"
+                }
+                
+                // Create deployment manifest with all metadata needed for hardware testing
+                writeFile file: env.DEPLOYMENT_MANIFEST, text: """
+apiVersion: v1
+kind: DeploymentManifest
+metadata:
+  name: zcu102-bsp-${env.BUILD_VERSION}
+  labels:
+    board: ${params.TARGET_BOARD}
+    pipeline: ${env.JOB_NAME}
+    build: ${env.BUILD_NUMBER}
+spec:
+  artifacts:
+    bootloader:
+      path: ${env.ARTIFACTORY_SERVER}/${env.ARTIFACTORY_REPO}/${params.TARGET_BOARD}/${env.BUILD_VERSION}/BOOT.BIN
+      checksum: \$(cat images/linux/BOOT.BIN.sha256 | cut -d' ' -f1)
+    kernel:
+      path: ${env.ARTIFACTORY_SERVER}/${env.ARTIFACTORY_REPO}/${params.TARGET_BOARD}/${env.BUILD_VERSION}/image.ub  
+      checksum: \$(cat images/linux/image.ub.sha256 | cut -d' ' -f1)
+    rootfs:
+      path: ${env.ARTIFACTORY_SERVER}/${env.ARTIFACTORY_REPO}/${params.TARGET_BOARD}/${env.BUILD_VERSION}/rootfs.tar.gz
+      checksum: \$(cat images/linux/rootfs.tar.gz.sha256 | cut -d' ' -f1)
+  source:
+    repository: ${env.GIT_URL}
+    commit: ${env.GIT_COMMIT}
+    branch: ${params.BSP_BRANCH}
+    timestamp: \$(date -Iseconds)
+  testing:
+    suite: ${params.TEST_SUITE}
+    target_board: ${params.TARGET_BOARD}
+    skip_hardware: ${params.SKIP_HARDWARE_TEST}
+"""
+                
+                // Archive the manifest for downstream jobs
+                archiveArtifacts artifacts: env.DEPLOYMENT_MANIFEST, allowEmptyArchive: false
+                
+                echo "📋 Deployment manifest created: ${env.DEPLOYMENT_MANIFEST}"
+            }
+        }
+        
+        stage('Trigger Hardware Testing') {
+            when {
+                not { params.SKIP_HARDWARE_TEST }
+            }
+            steps {
+                script {
+                    echo "🔬 Triggering hardware validation on ${env.TEST_HOST_LABEL}"
+                }
+                
+                // Trigger downstream hardware test job
+                build job: 'Hardware-Test-ZCU102', 
+                      wait: true,
+                      propagate: false,  // Don't fail this job if tests fail
+                      parameters: [
+                          string(name: 'DEPLOYMENT_MANIFEST_URL', 
+                                value: "${env.BUILD_URL}/artifact/${env.DEPLOYMENT_MANIFEST}"),
+                          string(name: 'TEST_SUITE', value: params.TEST_SUITE),
+                          string(name: 'BUILD_VERSION', value: env.BUILD_VERSION)
+                      ]
+            }
+            
+            post {
+                always {
+                    script {
+                        // Capture test results regardless of outcome
+                        copyArtifacts projectName: 'Hardware-Test-ZCU102',
+                                     selector: specific("${env.BUILD_NUMBER}"),
+                                     filter: 'test_results/**',
+                                     optional: true
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                echo "🏁 Pipeline execution completed"
+            }
+            
+            // Cleanup workspace but preserve logs
+            cleanWs(patterns: [[pattern: 'build/', type: 'EXCLUDE'],
+                              [pattern: '*.log', type: 'EXCLUDE']])
+        }
+        
+        success {
+            script {
+                def message = """
+✅ **ZCU102 BSP Build Successful**
+• **Board**: ${params.TARGET_BOARD}
+• **Version**: ${env.BUILD_VERSION}  
+• **Branch**: ${params.BSP_BRANCH}
+• **Artifacts**: ${env.ARTIFACTORY_SERVER}/${env.ARTIFACTORY_REPO}/${params.TARGET_BOARD}/${env.BUILD_VERSION}/
+• **Test Suite**: ${params.TEST_SUITE}
+• **Duration**: ${currentBuild.durationString}
+"""
+                
+                // Notify success to communication channels
+                slackSend channel: env.SLACK_CHANNEL, 
+                         color: 'good',
+                         message: message
+                         
+                // Update commit status in Git
+                publishChecks name: 'ZCU102 BSP Build',
+                            title: 'Build and Test Pipeline',
+                            summary: 'BSP build and validation completed successfully',
+                            text: message,
+                            status: 'COMPLETED',
+                            conclusion: 'SUCCESS'
+            }
+        }
+        
+        failure {
+            script {
+                def message = """
+❌ **ZCU102 BSP Build Failed**
+• **Board**: ${params.TARGET_BOARD}
+• **Branch**: ${params.BSP_BRANCH}
+• **Failed Stage**: ${env.FAILED_STAGE ?: 'Unknown'}
+• **Build**: ${env.BUILD_URL}
+• **Duration**: ${currentBuild.durationString}
+
+Please check the build logs and contact the embedded team if assistance is needed.
+"""
+                
+                // Notify failure with urgency
+                slackSend channel: env.SLACK_CHANNEL,
+                         color: 'danger', 
+                         message: message
+                         
+                // Update commit status in Git
+                publishChecks name: 'ZCU102 BSP Build',
+                            title: 'Build and Test Pipeline', 
+                            summary: 'BSP build or validation failed',
+                            text: message,
+                            status: 'COMPLETED',
+                            conclusion: 'FAILURE'
+            }
+        }
+        
+        unstable {
+            script {
+                def message = """
+⚠️ **ZCU102 BSP Build Unstable**
+• **Board**: ${params.TARGET_BOARD}
+• **Issues**: Test failures or quality gate violations
+• **Build**: ${env.BUILD_URL}
+
+Artifacts were built successfully but validation issues were detected.
+"""
+                
+                slackSend channel: env.SLACK_CHANNEL,
+                         color: 'warning',
+                         message: message
+            }
+        }
+    }
+}

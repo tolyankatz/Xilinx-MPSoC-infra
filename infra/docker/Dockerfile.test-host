@@ -1,0 +1,124 @@
+# Test Host Environment Dockerfile
+#
+# This Dockerfile creates a containerized test host environment for executing
+# ZCU102 hardware validation tests. It includes the Python test framework,
+# all dependencies, and necessary tools for hardware interaction.
+#
+# The container enables consistent test execution across different environments
+# and supports both physical hardware testing and mock testing modes.
+
+FROM python:3.10-slim-bullseye
+
+# Metadata
+LABEL maintainer="Embedded Team <embedded@company.com>"
+LABEL description="ZCU102 test host environment for hardware validation"
+LABEL version="1.0"
+
+# Environment configuration
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Create test user for security
+RUN groupadd -g 1000 testuser && \
+    useradd -u 1000 -g testuser -m -s /bin/bash testuser
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # Build tools
+    build-essential \
+    gcc \
+    # Network tools for connectivity testing
+    iputils-ping \
+    iproute2 \
+    net-tools \
+    iperf3 \
+    curl \
+    wget \
+    openssh-client \
+    # Serial communication tools
+    minicom \
+    picocom \
+    # Hardware interface tools
+    usbutils \
+    # System monitoring tools
+    htop \
+    iotop \
+    sysstat \
+    # Development tools
+    git \
+    vim \
+    nano \
+    tree \
+    # Archive and compression tools
+    unzip \
+    tar \
+    gzip \
+    # Additional utilities
+    jq \
+    bc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create application directories
+RUN mkdir -p /app/test_host /app/logs /app/results /app/config && \
+    chown -R testuser:testuser /app
+
+# Switch to test user
+USER testuser
+WORKDIR /app
+
+# Copy test framework
+COPY --chown=testuser:testuser test_host/ /app/test_host/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --user -r /app/test_host/requirements.txt
+
+# Add user Python packages to PATH
+ENV PATH="/home/testuser/.local/bin:${PATH}"
+
+# Copy default configuration
+COPY --chown=testuser:testuser test_host/config.yaml /app/config/config.yaml
+
+# Create test execution script
+RUN echo '#!/bin/bash\n\
+cd /app/test_host\n\
+python run_tests.py "$@"\n\
+' > /app/run_tests.sh && chmod +x /app/run_tests.sh
+
+# Set up environment variables for test framework
+ENV TEST_CONFIG_PATH="/app/config/config.yaml"
+ENV TEST_RESULTS_PATH="/app/results"
+ENV TEST_LOGS_PATH="/app/logs"
+
+# Health check to verify Python environment
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import pytest, serial, yaml, prometheus_client" || exit 1
+
+# Expose ports that might be used for test communication
+EXPOSE 8080 9090
+
+# Create volume mount points for external configuration and results
+VOLUME ["/app/config", "/app/results", "/app/logs"]
+
+# Default command runs the test orchestrator
+CMD ["/app/run_tests.sh", "--help"]
+
+# Usage instructions
+LABEL usage_instructions="\
+Usage Examples:\n\
+\n\
+# Run smoke tests with mock hardware:\n\
+docker run --rm -v ./results:/app/results zcu102-test-host:latest --test-suite smoke --mock-hardware\n\
+\n\
+# Run with custom config and hardware access:\n\
+docker run --rm --privileged -v /dev:/dev -v ./config:/app/config -v ./results:/app/results zcu102-test-host:latest --test-suite regression\n\
+\n\
+# Interactive shell for debugging:\n\
+docker run -it --rm zcu102-test-host:latest /bin/bash\n\
+\n\
+Environment Variables:\n\
+- TEST_CONFIG_PATH: Path to test configuration file\n\
+- TEST_RESULTS_PATH: Path to store test results\n\
+- TEST_LOGS_PATH: Path to store test logs\n\
+"

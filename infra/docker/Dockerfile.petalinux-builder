@@ -1,0 +1,173 @@
+# PetaLinux Build Environment Dockerfile for Jenkins CI/CD
+#
+# This Dockerfile creates a containerized PetaLinux build environment optimized for
+# Jenkins CI/CD pipelines. It includes all dependencies required to build ZCU102
+# BSP artifacts in a reproducible and scalable manner.
+#
+# The container embodies the "glass box" philosophy by providing full visibility
+# into the build environment and ensuring consistent, traceable builds.
+
+FROM ubuntu:20.04
+
+# Metadata
+LABEL maintainer="Embedded Team <embedded@company.com>"
+LABEL description="PetaLinux build environment for ZCU102 BSP CI/CD"
+LABEL version="2023.1"
+
+# Environment configuration
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# PetaLinux version and paths
+ENV PETALINUX_VERSION=2023.1
+ENV PETALINUX_INSTALL_DIR=/opt/Xilinx/PetaLinux
+ENV XILINX_INSTALL_DIR=/opt/Xilinx
+
+# Create build user (non-root for security)
+RUN groupadd -g 1000 builder && \
+    useradd -u 1000 -g builder -m -s /bin/bash builder && \
+    echo "builder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Install system dependencies for PetaLinux
+RUN apt-get update && apt-get install -y \
+    # Build essentials
+    build-essential \
+    gcc-multilib \
+    g++-multilib \
+    libc6-dev \
+    libc6-dev-i386 \
+    # System utilities
+    curl \
+    wget \
+    git \
+    rsync \
+    unzip \
+    gzip \
+    cpio \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-distutils \
+    python3-pexpect \
+    python3-git \
+    python3-jinja2 \
+    # Development tools
+    vim \
+    nano \
+    tree \
+    file \
+    diffstat \
+    texinfo \
+    gawk \
+    chrpath \
+    socat \
+    xterm \
+    # Network tools
+    net-tools \
+    iputils-ping \
+    openssh-client \
+    # Archive tools
+    tar \
+    bzip2 \
+    xz-utils \
+    zstd \
+    # Graphics libraries (for some PetaLinux components)
+    libgtk-3-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    # Additional dependencies for ZCU102
+    device-tree-compiler \
+    u-boot-tools \
+    # Xilinx-specific dependencies
+    libtinfo5 \
+    libncurses5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install additional Python packages for build automation
+RUN pip3 install \
+    pyyaml \
+    jinja2 \
+    GitPython \
+    requests
+
+# Create Xilinx installation directory with proper permissions
+RUN mkdir -p ${XILINX_INSTALL_DIR} && \
+    chown -R builder:builder ${XILINX_INSTALL_DIR}
+
+# Set up locale
+RUN apt-get update && apt-get install -y locales && \
+    locale-gen en_US.UTF-8 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create workspace directories
+RUN mkdir -p /workspace/build /workspace/artifacts /workspace/logs && \
+    chown -R builder:builder /workspace
+
+# Install PetaLinux installer script
+COPY --chown=builder:builder install_petalinux.sh /tmp/install_petalinux.sh
+RUN chmod +x /tmp/install_petalinux.sh
+
+# Switch to build user
+USER builder
+WORKDIR /home/builder
+
+# Set up bash environment for PetaLinux
+RUN echo "# PetaLinux Environment" >> ~/.bashrc && \
+    echo "export PETALINUX=${PETALINUX_INSTALL_DIR}" >> ~/.bashrc && \
+    echo "if [ -f ${PETALINUX_INSTALL_DIR}/settings.sh ]; then" >> ~/.bashrc && \
+    echo "  source ${PETALINUX_INSTALL_DIR}/settings.sh" >> ~/.bashrc && \
+    echo "fi" >> ~/.bashrc
+
+# Install PetaLinux (placeholder - actual installer would need to be provided)
+# NOTE: The actual PetaLinux installer must be downloaded from Xilinx and 
+# placed in the build context due to licensing requirements
+#
+# To build this image with PetaLinux:
+# 1. Download petalinux-v2023.1-final-installer.run from Xilinx
+# 2. Place it in the docker build context
+# 3. Uncomment and modify the following RUN command:
+#
+# COPY petalinux-v2023.1-final-installer.run /tmp/
+# RUN chmod +x /tmp/petalinux-v2023.1-final-installer.run && \
+#     /tmp/petalinux-v2023.1-final-installer.run --dir ${PETALINUX_INSTALL_DIR} --platform "aarch64" && \
+#     rm /tmp/petalinux-v2023.1-final-installer.run
+
+# For now, create a placeholder installation for testing
+RUN mkdir -p ${PETALINUX_INSTALL_DIR} && \
+    echo "#!/bin/bash" > ${PETALINUX_INSTALL_DIR}/settings.sh && \
+    echo "# Placeholder PetaLinux environment setup" >> ${PETALINUX_INSTALL_DIR}/settings.sh && \
+    echo "export PETALINUX=${PETALINUX_INSTALL_DIR}" >> ${PETALINUX_INSTALL_DIR}/settings.sh && \
+    echo "export PATH=${PETALINUX_INSTALL_DIR}/tools/linux-i386:${PETALINUX_INSTALL_DIR}/bin:\$PATH" >> ${PETALINUX_INSTALL_DIR}/settings.sh && \
+    chmod +x ${PETALINUX_INSTALL_DIR}/settings.sh
+
+# Create mock PetaLinux tools for testing (replace with actual tools in production)
+RUN mkdir -p ${PETALINUX_INSTALL_DIR}/bin && \
+    echo '#!/bin/bash\necho "Mock petalinux-build called with args: $@"\nexit 0' > ${PETALINUX_INSTALL_DIR}/bin/petalinux-build && \
+    echo '#!/bin/bash\necho "Mock petalinux-config called with args: $@"\nexit 0' > ${PETALINUX_INSTALL_DIR}/bin/petalinux-config && \
+    echo '#!/bin/bash\necho "Mock petalinux-package called with args: $@"\nexit 0' > ${PETALINUX_INSTALL_DIR}/bin/petalinux-package && \
+    echo '#!/bin/bash\necho "Mock petalinux-util called with args: $@"\necho "PetaLinux Mock Version 2023.1"' > ${PETALINUX_INSTALL_DIR}/bin/petalinux-util && \
+    chmod +x ${PETALINUX_INSTALL_DIR}/bin/*
+
+# Set working directory for builds
+WORKDIR /workspace
+
+# Health check to verify environment
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD source ${PETALINUX_INSTALL_DIR}/settings.sh && petalinux-util --version || exit 1
+
+# Default command
+CMD ["/bin/bash", "-c", "source ${PETALINUX_INSTALL_DIR}/settings.sh && /bin/bash"]
+
+# Build instructions and usage
+LABEL build_instructions="\
+To build this image with full PetaLinux support:\n\
+1. Download PetaLinux 2023.1 installer from Xilinx\n\
+2. Place installer in build context\n\
+3. Modify Dockerfile to include actual installer\n\
+4. Build: docker build -t zcu102-petalinux-builder:latest .\n\
+\n\
+Usage in Jenkins:\n\
+docker run --rm -v \$PWD:/workspace zcu102-petalinux-builder:latest\n\
+"
