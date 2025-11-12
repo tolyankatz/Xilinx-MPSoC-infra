@@ -1,0 +1,114 @@
+# ===================================================================
+# Hotfix Manifest for ZCU102 BSP (Security Update)
+# ===================================================================
+# Critical security update for CVE-2025-XXXXX
+# -------------------------------------------------------------------
+
+manifest_version: 1.0
+
+# --- Target and Build Information ---
+target_board: "ZCU102"
+build_info:
+  build_id: "bsp-hotfix-2025.11.1"
+  commit_hash: "d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f6789"
+  base_version: "2.1.0"
+  security_bulletin: "SB-2025-011"
+  cve_references: ["CVE-2025-XXXXX", "CVE-2025-YYYYY"]
+  build_timestamp: "2025-11-12T16:45:00Z"
+  urgency: "high"
+
+# --- Artifacts ---
+artifacts:
+  repository_url: "https://artifactory.mycompany.com/artifactory/bsp-security/"
+  components:
+    - name: "security_patches"
+      file: "security-update-2025.11.1.tar.gz"
+      version: "2025.11.1"
+      checksum_sha256: "a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890a1"
+      affects: ["openssl", "busybox", "dropbear"]
+
+    - name: "verification_script"
+      file: "verify_security_update.sh"
+      version: "1.0.2"
+      checksum_sha256: "b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890a1b"
+
+# --- Deployment Configuration ---
+deployment_config:
+  method: "secure_ssh"
+  requires_reboot: true
+  rollback_supported: true
+  max_downtime_minutes: 5
+  maintenance_window: "2025-11-15T02:00:00Z/PT1H"
+  affected_versions: ["2.0.0", "2.0.1", "2.1.0"]
+  prerequisites:
+    - "disk_space: 100MB"
+    - "memory: 512MB"
+    - "packages: [openssl >= 1.1.1, busybox >= 1.30.0]"
+
+# --- Runtime Configuration ---
+runtime_config:
+  security:
+    minimum_tls_version: "1.2"
+    disable_weak_ciphers: true
+    enable_selinux: true
+    enable_aslr: true
+    enable_stack_protection: true
+
+  backup:
+    enabled: true
+    location: "/var/backups/"
+    keep_last: 3
+
+  monitoring:
+    enable_audit_logging: true
+    log_security_events: true
+    alert_on_anomalies: true
+
+# --- Update Instructions ---
+update_instructions: |
+  ZCU102 Security Hotfix 2025.11.1
+  ===============================
+  
+  This is a MANDATORY security update addressing critical vulnerabilities:
+  
+  1. CVE-2025-XXXXX: Remote code execution in OpenSSL
+  2. CVE-2025-YYYYY: Privilege escalation in busybox
+  
+  Deployment Steps:
+  1. Verify system meets prerequisites
+  2. Create backup using /opt/utils/backup_system.sh
+  3. Apply update: sudo ./apply_security_update.sh
+  4. Reboot the system
+  5. Verify update with: sudo ./verify_security_update.sh
+  
+  Verification:
+  - OpenSSL version should be 1.1.1w or later
+  - BusyBox should be 1.36.1 or later
+  - No vulnerable packages should be detected
+  
+  Rollback:
+  Use /opt/utils/rollback_update.sh if issues occur
+
+# --- Test Plan ---
+test_plan:
+  - "pre_update_health_check"
+  - "security_patch_verification"
+  - "core_functionality_check"
+  - "rollback_test"
+  - "post_update_health_check"
+
+# --- Contact Information ---
+security_contacts:
+  - name: "Security Team"
+    email: "security@mycompany.com"
+    phone: "+1-555-123-4567"
+    response_time: "24/7"
+
+# --- Digital Signature ---
+signature:
+  algorithm: "rsa-sha256"
+  key_id: "security-team-2025"
+  signature: |
+    -----BEGIN PGP SIGNATURE-----
+    [Digital signature would be here in a real file]
+    -----END PGP SIGNATURE-----

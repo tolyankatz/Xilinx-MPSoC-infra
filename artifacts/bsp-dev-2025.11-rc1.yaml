@@ -1,0 +1,108 @@
+# ===================================================================
+# Deployment Manifest for ZCU102 BSP (Development Build)
+# ===================================================================
+# Development build with experimental features and debug symbols
+# -------------------------------------------------------------------
+
+manifest_version: 1.1  # Using newer schema version for development
+
+# --- Target and Build Information ---
+target_board: "ZCU102"
+build_info:
+  build_id: "bsp-dev-2025.11-rc1"
+  commit_hash: "c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f6"
+  branch: "feature/new-driver-support"
+  build_timestamp: "2025-11-12T14:30:00Z"
+  build_type: "development"
+  debug_symbols: true
+
+# --- Artifacts ---
+artifacts:
+  repository_url: "https://artifactory.mycompany.com/artifactory/bsp-dev-builds/"
+  components:
+    - name: "boot_binary"
+      file: "BOOT_DEBUG.BIN"
+      version: "2025.11-dev1"
+      checksum_md5: "a1b2c3d4e5f67890a1b2c3d4e5f67890a"
+
+    - name: "kernel_image"
+      file: "vmlinux"
+      version: "6.2.0-rc7"
+      checksum_md5: "b2c3d4e5f67890a1b2c3d4e5f67890a1b"
+
+    - name: "device_tree"
+      file: "devicetree.dtb"
+      version: "2025.11-dev1"
+      checksum_md5: "c3d4e5f67890a1b2c3d4e5f67890a1b2c"
+
+    - name: "root_filesystem"
+      file: "rootfs-dev.tar.gz"
+      version: "2025.11-dev1"
+      checksum_md5: "d4e5f67890a1b2c3d4e5f67890a1b2c3d"
+
+    - name: "debug_symbols"
+      file: "debug-symbols.tgz"
+      version: "2025.11-dev1"
+      checksum_md5: "e5f67890a1b2c3d4e5f67890a1b2c3d4e"
+
+# --- Deployment Configuration ---
+deployment_config:
+  method: "tftp"  # Faster deployment for development
+  tftp_server: "192.168.1.50"
+  netboot_image: "netboot.elf"
+  auto_revert_on_failure: true
+  keep_previous_versions: 2
+
+# --- Runtime Configuration ---
+runtime_config:
+  console:
+    baud_rate: 115200
+    log_level: "debug"
+    kernel_cmdline: "loglevel=7 earlycon"
+
+  network:
+    interface: "eth0"
+    config_method: "dhcp"
+    debug: true
+    packet_capture: true
+
+  system:
+    timezone: "UTC"
+    ntp_servers: ["pool.ntp.org"]
+    enable_ssh: true
+    enable_serial_console: true
+    enable_kernel_debug: true
+    enable_ftrace: true
+    enable_kprobes: true
+
+  credentials:
+    username: "developer"
+    password: "${DEV_PASSWORD}"  # To be replaced by CI/CD pipeline
+
+# --- Test Plan ---
+test_plan:
+  - "quick_smoke_test"
+  - "new_driver_validation"
+  - "performance_benchmark"
+  - "stress_test_light"
+  - "debug_symbols_verification"
+  - "development_features"
+
+# --- Development Notes ---
+development_notes: |
+  ZCU102 Development Build 2025.11-rc1
+  ==================================
+  - Experimental new Ethernet driver
+  - Debug symbols included
+  - Enhanced tracing support
+  - Memory usage optimizations
+  
+  Known Issues:
+  - Intermittent network drops under heavy load
+  - High memory usage with debug features
+  
+  Build Flags:
+  - CONFIG_DEBUG_KERNEL=y
+  - CONFIG_DEBUG_FS=y
+  - CONFIG_FTRACE=y
+  - CONFIG_KPROBES=y
