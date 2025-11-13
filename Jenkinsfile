@@ -8,39 +8,32 @@
 pipeline {
     agent none
     
-    // Trigger: Activated when new BSP artifacts are published
+    // Trigger: Activated by filesystem monitoring or manual execution
+    // Note: NFS-based triggering requires external filesystem monitoring
     triggers {
-        artifactoryTrigger(
-            spec: '''{
-                "files": [
-                    {
-                        "pattern": "bsp-builds/**/*.yaml",
-                        "buildName": "BSP-Validation-Pipeline"
-                    },
-                    {
-                        "pattern": "bsp-dev-builds/**/*.yaml", 
-                        "buildName": "BSP-Dev-Pipeline"
-                    },
-                    {
-                        "pattern": "bsp-security/**/*.yaml",
-                        "buildName": "BSP-Security-Pipeline"
-                    }
-                ]
-            }'''
-        )
+        // Periodic check for new artifacts (every 5 minutes)
+        pollSCM('H/5 * * * *')
+        
+        // Can also be triggered manually or by external webhook
+        upstream(threshold: 'SUCCESS', upstreamProjects: 'BSP-Build-Pipeline')
     }
     
-    // Parameters passed by Artifactory trigger or manual execution
+    // Parameters passed by NFS monitoring or manual execution
     parameters {
         string(
             name: 'MANIFEST_PATH', 
             defaultValue: '', 
-            description: 'Path to BSP manifest file in Artifactory'
+            description: 'Path to BSP manifest file on NFS share (relative to NFS root)'
         )
         string(
             name: 'BUILD_ID', 
             defaultValue: '', 
             description: 'Build identifier from manifest'
+        )
+        string(
+            name: 'NFS_BUILD_PATH',
+            defaultValue: '',
+            description: 'Full NFS path to build directory containing artifacts'
         )
         choice(
             name: 'TEST_SCOPE',
@@ -72,13 +65,19 @@ pipeline {
         SLACK_CHANNEL = '#bsp-validation'
         EMAIL_RECIPIENTS = 'bsp-team@company.com'
         
-        // Artifact repository
-        ARTIFACTORY_URL = 'https://artifactory.company.com/artifactory'
+        // NFS Artifact Store configuration
+        NFS_ROOT = '/mnt/nfs_artifacts/bsp'
+        NFS_MOUNT_POINT = '/mnt/nfs_artifacts'
+        NFS_SERVER = credentials('nfs-server-address')
         
         // Framework paths on Test Host
         FRAMEWORK_PATH = '/opt/zcu102-bsp-validation'
         SCRIPTS_PATH = '/opt/zcu102-bsp-validation/scripts'
         MANIFESTS_PATH = '/opt/zcu102-bsp-validation/manifests'
+        
+        // Artifact management
+        ARTIFACT_RETENTION_DAYS = '30'
+        CHECKSUM_ALGORITHM = 'md5'
     }
     
     stages {
@@ -89,6 +88,7 @@ pipeline {
                     echo "=== BSP Hardware Validation Pipeline Started ==="
                     echo "Manifest Path: ${params.MANIFEST_PATH}"
                     echo "Build ID: ${params.BUILD_ID}"
+                    echo "NFS Build Path: ${params.NFS_BUILD_PATH}"
                     echo "Test Scope: ${params.TEST_SCOPE}"
                     echo "Force Deployment: ${params.FORCE_DEPLOYMENT}"
                     
@@ -97,12 +97,30 @@ pipeline {
                         error "FATAL: MANIFEST_PATH parameter is required"
                     }
                     
+                    // Auto-generate NFS build path if not provided
+                    if (params.NFS_BUILD_PATH.isEmpty() && !params.BUILD_ID.isEmpty()) {
+                        env.NFS_BUILD_PATH = "${env.NFS_ROOT}/${params.BUILD_ID}"
+                        echo "Auto-generated NFS Build Path: ${env.NFS_BUILD_PATH}"
+                    } else {
+                        env.NFS_BUILD_PATH = params.NFS_BUILD_PATH
+                    }
+                    
                     // Extract build info from manifest path
                     env.MANIFEST_FILENAME = params.MANIFEST_PATH.split('/').last()
                     env.BUILD_TYPE = env.MANIFEST_FILENAME.contains('-dev-') ? 'development' :
                                     env.MANIFEST_FILENAME.contains('-hotfix-') ? 'hotfix' : 'stable'
                     
                     echo "Detected build type: ${env.BUILD_TYPE}"
+                    
+                    // Verify NFS mount availability
+                    def nfsCheck = sh(
+                        script: "test -d ${env.NFS_MOUNT_POINT} && mountpoint -q ${env.NFS_MOUNT_POINT}",
+                        returnStatus: true
+                    )
+                    if (nfsCheck != 0) {
+                        error "FATAL: NFS mount point ${env.NFS_MOUNT_POINT} is not available or not mounted"
+                    }
+                    echo "NFS mount verification: PASSED"
                 }
                 
                 // Archive pipeline parameters for reference
@@ -162,13 +180,14 @@ pipeline {
                     
                     try {
                         sshagent(credentials: ['jenkins-test-host-key']) {
-                            // Execute the validation framework
+                            // Execute the validation framework with NFS paths
                             def testResult = sh(
                                 script: """
                                 ssh ${env.TEST_HOST_USER}@${env.TEST_HOST} \
                                 '${env.SCRIPTS_PATH}/run_hw_tests.sh \
                                 --manifest-path="${params.MANIFEST_PATH}" \
                                 --build-id="${params.BUILD_ID}" \
+                                --nfs-build-path="${env.NFS_BUILD_PATH}" \
                                 --test-scope="${params.TEST_SCOPE}" \
                                 --jenkins-build="${env.BUILD_NUMBER}" \
                                 --force-deployment=${params.FORCE_DEPLOYMENT}'

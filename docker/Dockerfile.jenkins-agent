@@ -1,0 +1,73 @@
+# ===================================================================
+# Dockerfile for Jenkins Agent with NFS Support
+# ===================================================================
+# Jenkins agent container configured for BSP validation pipeline
+# with NFS client support for artifact management
+# -------------------------------------------------------------------
+
+FROM jenkins/inbound-agent:latest-jdk11
+
+USER root
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # NFS client tools
+    nfs-common \
+    # Build and development tools
+    build-essential \
+    git \
+    curl \
+    wget \
+    unzip \
+    # Python and dependencies
+    python3 \
+    python3-pip \
+    python3-venv \
+    # Hardware access tools
+    usbutils \
+    # Network tools
+    net-tools \
+    iputils-ping \
+    # File and archive tools
+    file \
+    rsync \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Install Python packages
+RUN pip3 install --no-cache-dir \
+    pyyaml \
+    requests \
+    pytest \
+    jinja2
+
+# Create NFS mount point
+RUN mkdir -p /mnt/nfs_artifacts \
+    && chown jenkins:jenkins /mnt/nfs_artifacts
+
+# Create directories for framework
+RUN mkdir -p /opt/zcu102-bsp-validation \
+    && chown -R jenkins:jenkins /opt/zcu102-bsp-validation
+
+# Add NFS mount helper script
+COPY docker/scripts/mount-nfs.sh /usr/local/bin/mount-nfs.sh
+RUN chmod +x /usr/local/bin/mount-nfs.sh
+
+# Switch back to jenkins user
+USER jenkins
+
+# Set working directory
+WORKDIR /home/jenkins
+
+# Add environment variables
+ENV NFS_MOUNT_POINT="/mnt/nfs_artifacts" \
+    NFS_ROOT="/mnt/nfs_artifacts/bsp" \
+    FRAMEWORK_PATH="/opt/zcu102-bsp-validation"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD test -d $NFS_MOUNT_POINT || exit 1
+
+# Entry point
+ENTRYPOINT ["/usr/local/bin/jenkins-agent"]
