@@ -143,7 +143,7 @@ This framework is designed to be extensible and team-friendly:
 
 ## Engineering Philosophy
 
-As a Principal Engineer project, this framework embodies:
+As a BSP QA Engineer project, this framework embodies:
 - **Technical Excellence**: Clean, maintainable, well-documented code
 - **Operational Maturity**: Production-ready monitoring and debugging capabilities  
 - **Team Enablement**: Tools and documentation that empower the entire engineering team
