@@ -1,0 +1,27 @@
+[Unit]
+Description=NFS Artifact Monitor Service
+After=network.target nfs-client.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=testuser
+Group=testuser
+WorkingDirectory=/opt/zcu102-bsp-validation
+Environment="PATH=/opt/zcu102-bsp-validation/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStartPre=/usr/local/bin/mount-nfs.sh
+ExecStart=/opt/zcu102-bsp-validation/scripts/nfs_artifact_monitor.sh --daemon
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/zcu102-bsp-validation /mnt/nfs_artifacts /var/lib/nfs-artifact-monitor
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

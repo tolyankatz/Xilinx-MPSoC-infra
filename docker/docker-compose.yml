@@ -1,0 +1,225 @@
+# ===================================================================
+# Docker Compose Configuration for BSP Validation Infrastructure
+# ===================================================================
+# Complete infrastructure stack with NFS support
+# -------------------------------------------------------------------
+
+version: '3.8'
+
+services:
+  # Jenkins Controller
+  jenkins:
+    image: jenkins/jenkins:lts-jdk11
+    container_name: bsp-jenkins
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - nfs_artifacts:/mnt/nfs_artifacts:ro
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
+      - JAVA_OPTS=-Xmx2048m -Dhudson.footerURL=https://company.com
+    networks:
+      - bsp_network
+    depends_on:
+      - nfs_server
+
+  # Jenkins Agent with NFS Support
+  jenkins_agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins-agent
+    container_name: bsp-jenkins-agent
+    restart: unless-stopped
+    volumes:
+      - nfs_artifacts:/mnt/nfs_artifacts
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - NFS_SERVER=nfs_server
+      - NFS_EXPORT=/exports/bsp
+      - JENKINS_URL=http://jenkins:8080
+      - JENKINS_AGENT_NAME=docker-agent-01
+      - JENKINS_SECRET=${JENKINS_AGENT_SECRET}
+    networks:
+      - bsp_network
+    depends_on:
+      - jenkins
+      - nfs_server
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      - apparmor:unconfined
+
+  # Test Host Environment
+  test_host:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-host
+    container_name: bsp-test-host
+    restart: unless-stopped
+    volumes:
+      - nfs_artifacts:/mnt/nfs_artifacts
+      - test_host_data:/opt/zcu102-bsp-validation
+      - /dev:/dev
+    environment:
+      - NFS_SERVER=nfs_server
+      - NFS_EXPORT=/exports/bsp
+      - JENKINS_URL=http://jenkins:8080
+      - JENKINS_JOB=ZCU102-BSP-Hardware-Validation
+    networks:
+      - bsp_network
+    depends_on:
+      - nfs_server
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0  # Adjust based on actual hardware
+      - /dev/ttyUSB1:/dev/ttyUSB1
+
+  # NFS Server for Artifact Storage
+  nfs_server:
+    image: itsthenetwork/nfs-server-alpine:latest
+    container_name: bsp-nfs-server
+    restart: unless-stopped
+    volumes:
+      - nfs_data:/nfsshare
+    environment:
+      - SHARED_DIRECTORY=/nfsshare
+      - SYNC=true
+      - PERMITTED="*(rw,sync,no_subtree_check,no_root_squash,insecure)"
+    networks:
+      - bsp_network
+    cap_add:
+      - SYS_ADMIN
+      - SYS_MODULE
+    security_opt:
+      - apparmor:unconfined
+
+  # Artifact Monitor Service
+  artifact_monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-host
+    container_name: bsp-artifact-monitor
+    restart: unless-stopped
+    volumes:
+      - nfs_artifacts:/mnt/nfs_artifacts:ro
+      - monitor_state:/var/lib/nfs-artifact-monitor
+    environment:
+      - NFS_SERVER=nfs_server
+      - JENKINS_URL=http://jenkins:8080
+      - JENKINS_JOB=ZCU102-BSP-Hardware-Validation
+      - JENKINS_USER=${JENKINS_USER}
+      - JENKINS_TOKEN=${JENKINS_TOKEN}
+      - DEBUG=false
+    networks:
+      - bsp_network
+    depends_on:
+      - jenkins
+      - nfs_server
+    command: ["/opt/zcu102-bsp-validation/scripts/nfs_artifact_monitor.sh", "--daemon"]
+
+  # ELK Stack for Logging (Optional)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.0
+    container_name: bsp-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - bsp_network
+    ports:
+      - "9200:9200"
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.15.0
+    container_name: bsp-logstash
+    restart: unless-stopped
+    volumes:
+      - ./docker/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - test_host_data:/opt/zcu102-bsp-validation:ro
+    networks:
+      - bsp_network
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.0
+    container_name: bsp-kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - bsp_network
+    depends_on:
+      - elasticsearch
+
+  # Prometheus for Metrics (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: bsp-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - bsp_network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: bsp-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    networks:
+      - bsp_network
+    depends_on:
+      - prometheus
+
+# Networks
+networks:
+  bsp_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes
+volumes:
+  jenkins_home:
+    driver: local
+  nfs_data:
+    driver: local
+  nfs_artifacts:
+    driver: local
+  test_host_data:
+    driver: local
+  monitor_state:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

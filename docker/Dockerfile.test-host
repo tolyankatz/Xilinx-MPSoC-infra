@@ -1,0 +1,106 @@
+# ===================================================================
+# Dockerfile for Test Host Environment
+# ===================================================================
+# Test host container with NFS support for BSP hardware validation
+# Includes all necessary tools for artifact fetching and testing
+# -------------------------------------------------------------------
+
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # NFS client tools
+    nfs-common \
+    # Build and development tools
+    build-essential \
+    git \
+    curl \
+    wget \
+    # Python and dependencies
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    # Hardware access tools
+    usbutils \
+    udev \
+    # Serial communication
+    minicom \
+    screen \
+    # Network tools
+    net-tools \
+    iputils-ping \
+    openssh-client \
+    # File and archive tools
+    file \
+    rsync \
+    unzip \
+    tar \
+    # Testing tools
+    expect \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create test user
+RUN useradd -m -s /bin/bash testuser \
+    && usermod -a -G dialout,tty,plugdev testuser
+
+# Create NFS mount point
+RUN mkdir -p /mnt/nfs_artifacts \
+    && chown testuser:testuser /mnt/nfs_artifacts
+
+# Create framework directory structure
+RUN mkdir -p /opt/zcu102-bsp-validation/{logs,test-results,screenshots,manifests,artifacts} \
+    && chown -R testuser:testuser /opt/zcu102-bsp-validation
+
+# Switch to test user
+USER testuser
+WORKDIR /home/testuser
+
+# Create Python virtual environment
+RUN python3 -m venv /opt/zcu102-bsp-validation/venv
+
+# Install Python packages in virtual environment
+RUN /opt/zcu102-bsp-validation/venv/bin/pip install --no-cache-dir \
+    pyyaml \
+    requests \
+    pytest \
+    pytest-html \
+    pytest-xdist \
+    jinja2 \
+    paramiko \
+    serial \
+    pexpect
+
+# Copy framework files (these would be added during container deployment)
+# COPY --chown=testuser:testuser scripts/ /opt/zcu102-bsp-validation/scripts/
+# COPY --chown=testuser:testuser test_host/ /opt/zcu102-bsp-validation/test_host/
+
+# Add NFS mount helper script
+USER root
+COPY docker/scripts/mount-nfs.sh /usr/local/bin/mount-nfs.sh
+RUN chmod +x /usr/local/bin/mount-nfs.sh
+
+# Create systemd service for NFS artifact monitoring
+COPY docker/scripts/nfs-monitor.service /etc/systemd/system/
+RUN systemctl enable nfs-monitor.service || true
+
+# Switch back to test user
+USER testuser
+
+# Set environment variables
+ENV NFS_MOUNT_POINT="/mnt/nfs_artifacts" \
+    NFS_ROOT="/mnt/nfs_artifacts/bsp" \
+    FRAMEWORK_ROOT="/opt/zcu102-bsp-validation" \
+    PYTHON_VENV="/opt/zcu102-bsp-validation/venv/bin/activate"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD test -d $NFS_MOUNT_POINT && test -f $FRAMEWORK_ROOT/scripts/run_hw_tests.sh || exit 1
+
+# Default command
+CMD ["/bin/bash"]
