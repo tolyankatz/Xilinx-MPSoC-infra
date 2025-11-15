@@ -1,0 +1,6 @@
+git
+ssh-agent
+blueocean
+job-dsl
+configuration-as-code
+gitea

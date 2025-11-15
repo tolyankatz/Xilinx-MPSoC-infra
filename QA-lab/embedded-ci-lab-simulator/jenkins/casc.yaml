@@ -1,0 +1,32 @@
+jenkins:
+  systemMessage: "Embedded CI Lab Simulator - Jenkins"
+  numExecutors: 2
+  mode: NORMAL
+  disabledAdministrativeMonitors:
+    - "hudson.diagnosis.ReverseProxySetupMonitor"
+  securityRealm:
+    local:
+      allowsSignup: false
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: "http://jenkins:8080/"
+  giteaServers:
+    servers:
+      - displayName: "local-gitea"
+        serverUrl: "http://gitea:3000"
+        manageHooks: true
+        credentialsId: "gitea-admin-creds"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              id: "gitea-admin-creds"
+              username: "admin"
+              password: "password"
+              description: "Gitea admin user for local lab"

@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  gitea:
+    image: gitea/gitea:latest
+    restart: always
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+    networks:
+      - lab_network
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - lab_network
+
+  jenkins:
+    build: ./jenkins
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    environment:
+      CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc.yaml
+    depends_on:
+      - gitea
+      - minio
+    networks:
+      - lab_network
+
+  host_controller:
+    build: ./host_controller
+    restart: unless-stopped
+    depends_on:
+      - jenkins
+      - minio
+    ports:
+      - "2223:22"
+    environment:
+      MINIO_ALIAS: minio
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    networks:
+      - lab_network
+
+  dut_simulator:
+    build: ./dut_simulator
+    restart: unless-stopped
+    depends_on:
+      - host_controller
+    networks:
+      - lab_network
+
+networks:
+  lab_network:
+    driver: bridge
+
+volumes:
+  gitea_data:
+  jenkins_home:
+  minio_data:
