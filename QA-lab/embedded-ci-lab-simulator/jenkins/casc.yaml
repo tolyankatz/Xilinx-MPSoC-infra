@@ -17,7 +17,7 @@ unclassified:
   giteaServers:
     servers:
       - displayName: "local-gitea"
-        serverUrl: "http://gitea:3000"
+        serverUrl: "http://localhost:3000"
         manageHooks: true
         credentialsId: "gitea-admin-creds"
 
