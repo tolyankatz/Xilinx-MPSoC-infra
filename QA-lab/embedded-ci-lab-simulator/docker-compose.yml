@@ -1,4 +1,4 @@
-version: "3.8"
+version: '3.8'
 
 services:
   gitea:
@@ -34,6 +34,7 @@ services:
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc.yaml
     depends_on:
@@ -55,6 +56,9 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: password
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../zcu102-bsp-validation-monorepo/test_host:/app/test_host
     networks:
       - lab_network
 

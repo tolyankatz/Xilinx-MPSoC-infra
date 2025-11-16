@@ -9,9 +9,18 @@ RUN apt-get update \
        netcat \
        iperf3 \
        python3 \
+       python3-pip \
        curl \
        ca-certificates \
+       docker.io \
+       docker-compose \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for test framework
+RUN pip3 install --no-cache-dir \
+    paramiko \
+    pyyaml \
+    requests
 
 RUN mkdir -p /var/run/sshd
 

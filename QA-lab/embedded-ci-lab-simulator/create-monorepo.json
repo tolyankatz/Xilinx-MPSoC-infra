@@ -1,0 +1,5 @@
+{
+  "name": "zcu102-bsp-validation-monorepo",
+  "description": "ZCU102 BSP Validation Framework with automated testing",
+  "private": false
+}
