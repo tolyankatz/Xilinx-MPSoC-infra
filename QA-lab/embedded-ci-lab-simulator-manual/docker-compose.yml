@@ -1,0 +1,80 @@
+services:
+  gitea:
+    image: gitea/gitea:latest
+    restart: always
+    profiles: ["git-commit", "full"]
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+    networks:
+      - lab_network
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    profiles: ["git-commit", "full"]
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - lab_network
+
+  jenkins:
+    build: ./jenkins
+    restart: unless-stopped
+    profiles: ["full"]
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./ssh_keys/jenkins_id_rsa:/var/jenkins_home/.ssh/id_rsa:ro
+    depends_on:
+      - gitea
+      - minio
+    networks:
+      - lab_network
+
+  host_controller:
+    build:
+      context: .
+      dockerfile: ./host_controller/Dockerfile
+    restart: unless-stopped
+    profiles: ["full"]
+    depends_on:
+      - jenkins
+      - minio
+    ports:
+      - "2223:22"
+    environment:
+      MINIO_ALIAS: minio
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    networks:
+      - lab_network
+
+  dut_simulator:
+    build: ./dut_simulator
+    restart: unless-stopped
+    profiles: ["full"]
+    depends_on:
+      - host_controller
+    networks:
+      - lab_network
+
+networks:
+  lab_network:
+    driver: bridge
+
+volumes:
+  gitea_data:
+  jenkins_home:
+  minio_data:

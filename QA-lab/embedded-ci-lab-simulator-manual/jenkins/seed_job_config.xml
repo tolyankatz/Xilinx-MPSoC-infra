@@ -1,0 +1,48 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This job runs the Job DSL scripts to create/update other jobs.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <javaposse.jobdsl.plugin.ExecuteDslScripts plugin="job-dsl@1.77">
+      <scriptText>
+multibranchPipelineJob('bsp-pipeline-main') {
+    branchSources {
+        branchSource {
+            source {
+                git {
+                    id('bsp-pipeline-main')
+                    remote('http://localhost:3000/admin/zcu102-bsp.git')
+                    credentialsId('gitea-admin-creds')
+                }
+            }
+        }
+    }
+    factory {
+        workflowBranchProjectFactory {
+            scriptPath('Jenkinsfile')
+        }
+    }
+}
+      </scriptText>
+      <usingScriptText>true</usingScriptText>
+      <removedJobAction>DELETE</removedJobAction>
+      <removedViewAction>DELETE</removedViewAction>
+      <removedConfigFilesAction>DELETE</removedConfigFilesAction>
+      <ignoreExisting>false</ignoreExisting>
+      <failOnMissingPlugin>true</failOnMissingPlugin>
+      <sandbox>false</sandbox>
+      <additionalParameters/>
+    </javaposse.jobdsl.plugin.ExecuteDslScripts>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

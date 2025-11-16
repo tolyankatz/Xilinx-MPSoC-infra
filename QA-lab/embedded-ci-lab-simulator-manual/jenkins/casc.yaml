@@ -1,0 +1,34 @@
+jenkins:
+  systemMessage: "Welcome to the ZCU102 Automated Lab - Managed by JCasC"
+  numExecutors: 2
+  mode: NORMAL
+  disabledAdministrativeMonitors:
+    - "hudson.diagnosis.ReverseProxySetupMonitor"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "password"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+security:
+  globalJobDslSecurityConfiguration:
+    useScriptSecurity: false
+
+unclassified:
+  location:
+    url: "http://jenkins:8080/"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              id: "gitea-admin-creds"
+              username: "admin"
+              password: "password"
+              description: "Admin credentials for the local Gitea server"
+              scope: GLOBAL
