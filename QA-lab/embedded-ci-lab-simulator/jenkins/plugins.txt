@@ -1,6 +1,8 @@
 git
 ssh-agent
-blueocean
+workflow-aggregator
 job-dsl
 configuration-as-code
 gitea
+docker-workflow
+credentials

@@ -1,0 +1,5 @@
+{
+  "name": "bsp-build-pipeline",
+  "description": "BSP Build and Test Pipeline",
+  "private": false
+}

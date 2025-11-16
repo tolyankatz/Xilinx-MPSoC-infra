@@ -1,0 +1,91 @@
+pipeline {
+    agent any
+    
+    environment {
+        ARTIFACT_NAME = "zcu102-bsp-${env.BUILD_NUMBER}.tar.gz"
+        MINIO_BUCKET = "artifacts"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                echo 'Building ZCU102 BSP...'
+                sh '''
+                    echo "Simulating BSP build process..."
+                    mkdir -p build
+                    echo "ZCU102 BSP Build ${BUILD_NUMBER}" > build/version.txt
+                    echo "Build Date: $(date)" >> build/version.txt
+                    tar -czf ${ARTIFACT_NAME} build/
+                '''
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                echo 'Running remote validation on Host Controller...'
+                sh '''
+                    # Configure SSH to skip host key checking
+                    mkdir -p ~/.ssh
+                    chmod 700 ~/.ssh
+                    ssh-keyscan -H host_controller >> ~/.ssh/known_hosts 2>/dev/null || true
+                    
+                    # Test SSH connection and run remote command
+                    ssh -o StrictHostKeyChecking=no jenkins@host_controller "echo 'Connection successful from Jenkins'; uname -a"
+                '''
+            }
+        }
+        
+        stage('Publish') {
+            steps {
+                echo 'Publishing artifact to MinIO...'
+                sh '''
+                    # Configure MinIO client
+                    mc alias set minio http://minio:9000 admin password
+                    
+                    # Create bucket if it doesn't exist
+                    mc mb minio/${MINIO_BUCKET} --ignore-existing
+                    
+                    # Upload artifact
+                    mc cp ${ARTIFACT_NAME} minio/${MINIO_BUCKET}/
+                    
+                    echo "Artifact published: ${ARTIFACT_NAME}"
+                '''
+            }
+        }
+        
+        stage('Deploy to Test') {
+            steps {
+                echo 'Deploying to test environment via Host Controller...'
+                sh '''
+                    ssh -o StrictHostKeyChecking=no jenkins@host_controller "
+                        echo 'Downloading artifact from MinIO...'
+                        mc alias set minio http://minio:9000 admin password
+                        mc cp minio/${MINIO_BUCKET}/${ARTIFACT_NAME} /tmp/
+                        echo 'Artifact downloaded successfully'
+                        ls -lh /tmp/${ARTIFACT_NAME}
+                    "
+                '''
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+        always {
+            echo 'Cleaning up workspace...'
+            cleanWs()
+        }
+    }
+}

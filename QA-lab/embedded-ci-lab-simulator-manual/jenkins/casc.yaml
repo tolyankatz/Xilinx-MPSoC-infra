@@ -1,5 +1,5 @@
 jenkins:
-  systemMessage: "Embedded CI Lab Simulator - Jenkins"
+  systemMessage: "Welcome to the ZCU102 Automated Lab - Managed by JCasC"
   numExecutors: 2
   mode: NORMAL
   disabledAdministrativeMonitors:
@@ -7,19 +7,20 @@ jenkins:
   securityRealm:
     local:
       allowsSignup: false
+      users:
+        - id: "admin"
+          password: "password"
   authorizationStrategy:
     loggedInUsersCanDoAnything:
       allowAnonymousRead: false
 
+security:
+  globalJobDslSecurityConfiguration:
+    useScriptSecurity: false
+
 unclassified:
   location:
     url: "http://jenkins:8080/"
-  giteaServers:
-    servers:
-      - displayName: "local-gitea"
-        serverUrl: "http://localhost:3000"
-        manageHooks: true
-        credentialsId: "gitea-admin-creds"
 
 credentials:
   system:
@@ -29,9 +30,5 @@ credentials:
               id: "gitea-admin-creds"
               username: "admin"
               password: "password"
-              description: "Gitea admin user for local lab"
-          - usernamePassword:
-              id: "minio-credentials"
-              username: "admin"
-              password: "password"
-              description: "Minio access credentials"
+              description: "Admin credentials for the local Gitea server"
+              scope: GLOBAL
