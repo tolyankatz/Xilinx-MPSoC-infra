@@ -20,7 +20,7 @@ This monorepo implements a comprehensive, automated validation framework for the
            |                                   | 2. Pull Code       | 3. Push Artifacts
            | 5a. Pull Test Code                v                    v
            |                          +--------+-------+   +--------+---------+
-           |                          | Build Executor |-->| JFrog Artifactory|
+           |                          | Build Executor |-->| NFS/JFrog Artifactory|
            |                          +----------------+   | - Firmware/Images|
            |                                               | - Build Artifacts|
            |                                               +--------+---------+
@@ -30,7 +30,7 @@ This monorepo implements a comprehensive, automated validation framework for the
 |                                  Test Host / Lab Controller                           |
 |---------------------------------------------------------------------------------------|
 | - Python/Pytest Environment                                                           |
-| - Hardware Control Scripts (Power, JTAG) & Test Fixtures (I2C/GPIO)                   |
+| - Hardware Control Scripts (Power, JTAG) & Test Fixtures                  |
 | - Data Shipper (Filebeat)                                                             |
 +----------+----------------------+--------------------------+-------------+-----------+
            | 6. Provision & Ctrl   | 7. Run Tests             | 8a. Push Logs| 8b. Push Metrics
@@ -107,7 +107,7 @@ zcu102-bsp-validation-monorepo/
 
 ### Prerequisites
 - Jenkins server with Docker support
-- JFrog Artifactory instance
+- NFS/JFrog Artifactory instance
 - Hardware test lab with ZCU102 boards
 - ELK Stack and Prometheus/Grafana for observability
 
@@ -122,7 +122,7 @@ zcu102-bsp-validation-monorepo/
 
 Our framework validates:
 - **Boot Sequence**: Integrity, performance, and reliability across power cycles
-- **Protocol Testing**: UART, Ethernet, I2C/SPI, GPIO functional validation
+- **Protocol Testing**: UART, Ethernet, functional validation
 - **Linux System**: Performance, real-time characteristics, stability testing  
 - **Security Hardening**: Configuration verification and compliance checks
 
