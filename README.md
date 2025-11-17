@@ -19,11 +19,11 @@ This monorepo implements a comprehensive, automated validation framework for the
 +----------+-----------+                  +----+------------------+---+
            |                                   | 2. Pull Code       | 3. Push Artifacts
            | 5a. Pull Test Code                v                    v
-           |                          +--------+-------+   +--------+---------+
-           |                          | Build Executor |-->| NFS/JFrog Artifactory|
-           |                          +----------------+   | - Firmware/Images|
-           |                                               | - Build Artifacts|
-           |                                               +--------+---------+
+           |                          +--------+-------+   +-----------+-------------+
+           |                          | Build Executor |-->| - NFS/JFrog Artifactory |
+           |                          +----------------+   | - Firmware/Images       |
+           |                                               | - Build Artifacts       |
+           |                                               +------------+------------+
            |                                                        | 5b. Pull Firmware
            v                                                        v
 +----------+--------------------------------------------------------+------------------+
