@@ -80,7 +80,7 @@ This section details my plan for the core testing activities, addressing **"Prot
 
 ### **What is the Primary Focus? Design, Architecture, Code, or Analysis?**
 
-As a Principal Engineer, my focus is not on a single area but on orchestrating them in the correct sequence to build a mature and effective validation system. The focus evolves as the project matures:
+As a QA Engineer, my focus is not on a single area but on orchestrating them in the correct sequence to build a mature and effective validation system. The focus evolves as the project matures:
 
 1.  **Initial Focus: Architecture & Design.** This is paramount. A flawed architecture will lead to an unscalable, unmaintainable system. My first priority is to define the robust CI/CD pipeline, select the right tools, and design the interfaces between them. Getting the foundation right is everything.
 
