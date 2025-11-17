@@ -1,4 +1,0 @@
-# Ignore private keys
-jenkins_id_rsa
-# Keep public key for reference
-!jenkins_id_rsa.pub
