@@ -1,0 +1,49 @@
+# ZCU102 BSP Test Framework Dependencies
+# Core testing framework
+pytest>=7.0.0
+pytest-html>=3.1.0
+pytest-xdist>=2.5.0
+pytest-timeout>=2.1.0
+pytest-json-report>=1.5.0
+
+# Serial communication and hardware interface
+pyserial>=3.5
+pyftdi>=0.54.0
+
+# Configuration management
+pyyaml>=6.0
+python-dotenv>=0.19.0
+
+# Network testing and connectivity
+paramiko>=2.9.0
+requests>=2.27.0
+scapy>=2.4.5
+
+# Metrics and logging
+prometheus-client>=0.14.0
+python-json-logger>=2.0.0
+elasticsearch>=8.0.0
+
+# Data processing and analysis
+pandas>=1.4.0
+numpy>=1.21.0
+
+# Hardware control and GPIO
+gpiod>=1.5.0
+spidev>=3.5
+
+# System monitoring and stress testing
+psutil>=5.8.0
+
+# Development and debugging tools
+ipython>=8.0.0
+rich>=12.0.0
+click>=8.0.0
+
+# Cloud storage and artifact management
+boto3>=1.20.0
+azure-storage-blob>=12.0.0
+
+# Date and time utilities
+python-dateutil>=2.8.0
+pytz>=2021.3

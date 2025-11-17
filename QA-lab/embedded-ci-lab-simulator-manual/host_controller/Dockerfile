@@ -9,6 +9,11 @@ RUN apt-get update \
        netcat \
        iperf3 \
        python3 \
+       python3-pip \
+       python3-venv \
+       python3-dev \
+       build-essential \
+       gcc \
        curl \
        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -36,6 +41,16 @@ RUN mkdir -p /home/jenkins/.ssh \
     && chown -R jenkins:jenkins /home/jenkins/.ssh \
     && chmod 700 /home/jenkins/.ssh \
     && chmod 600 /home/jenkins/.ssh/authorized_keys
+
+# Copy test_host framework
+COPY host_controller/test_host /home/jenkins/test_host
+
+# Install test_host Python dependencies
+RUN cd /home/jenkins \
+    && python3 -m venv venv \
+    && . venv/bin/activate \
+    && pip install --no-cache-dir -r test_host/requirements.txt \
+    && chown -R jenkins:jenkins /home/jenkins/test_host /home/jenkins/venv
 
 COPY host_controller/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

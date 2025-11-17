@@ -1,0 +1,136 @@
+# ZCU102 BSP Test Framework Configuration - Docker Lab Environment
+# Simplified configuration for CI/CD lab simulator with mock hardware
+
+# Board type (required at root level)
+board_type: "zcu102"
+
+# Hardware Configuration
+hardware:
+  
+  # Serial console configuration (mock in Docker)
+  serial:
+    port: "/dev/null"
+    baud_rate: 115200
+    timeout_seconds: 10
+    read_timeout_seconds: 1
+    
+  # Network configuration for Ethernet testing  
+  network:
+    target_ip: "dut_simulator"
+    test_host_ip: "host_controller"
+    subnet_mask: "255.255.255.0"
+    gateway: "172.18.0.1"
+    interface: "eth0"
+    
+  # Power control configuration (Docker-based)
+  power:
+    controller_type: "docker"
+    device_id: "dut_simulator"
+    container_name: "embedded-ci-lab-simulator-manual-dut_simulator-1"
+    cycle_delay_seconds: 2
+    
+  # JTAG configuration (mock)
+  jtag:
+    cable_type: "mock"
+    device_part: "xczu9eg"
+    chain_position: 1
+    vivado_path: "/usr/bin/echo"
+
+# Test Suite Configuration
+test_suites:
+  smoke:
+    description: "Quick validation of core functionality"
+    tests:
+      - boot_sequence
+      - uart_basic
+      - network_ping
+    timeout_minutes: 5
+    
+  regression:
+    description: "Comprehensive validation covering all major features"
+    tests:
+      - boot_sequence
+      - uart_comprehensive
+      - network_performance
+      - system_stability
+    timeout_minutes: 10
+    
+  full:
+    description: "Extended validation including stress tests"
+    tests:
+      - boot_sequence
+      - uart_comprehensive
+      - network_performance
+      - system_stability
+      - system_stress
+    timeout_minutes: 20
+
+# Test Acceptance Criteria
+acceptance_criteria:
+  boot:
+    max_boot_time_seconds: 10
+    required_boot_messages:
+      - "U-Boot"
+      - "Linux"
+      - "login"
+    forbidden_boot_messages:
+      - "kernel panic"
+      - "Out of memory"
+      
+  performance:
+    min_ethernet_throughput_mbps: 900
+    max_ping_latency_ms: 2
+    max_boot_time_variance_seconds: 2
+    
+  stability:
+    min_uptime_hours: 1
+    max_memory_usage_percent: 80
+    max_cpu_temperature_celsius: 75
+
+# Hardware Test Fixtures (disabled for mock)
+fixtures:
+  gpio_loopback:
+    enabled: false
+    
+  i2c_devices:
+    enabled: false
+        
+  spi_devices:
+    enabled: false
+
+# Reporting and Observability (disabled - no ELK/Prometheus in this lab)
+reporting:
+  # Prometheus metrics endpoint (disabled)
+  prometheus:
+    enabled: false
+    pushgateway_url: "http://localhost:9091"
+    job_name: "zcu102_hardware_tests"
+    
+  # Elasticsearch logging (disabled)
+  elasticsearch:
+    enabled: false
+    hosts: ["localhost:9200"]
+    index_prefix: "zcu102-test-logs"
+    
+  # S3 artifact storage (use MinIO instead)
+  s3_storage:
+    enabled: false
+    bucket_name: "test-results"
+    endpoint_url: "http://minio:9000"
+    access_key: "admin"
+    secret_key: "password"
+    
+  # Local logging (enabled)
+  local_logs:
+    directory: "/home/jenkins/test_logs"
+    max_size_mb: 100
+    retention_days: 7
+
+# Development and Debugging Options
+development:
+  verbose_logging: true
+  mock_hardware: true
+  capture_console_screenshots: false
+  capture_full_uart_log: true
+  fail_fast: false
+  parallel_execution: false
