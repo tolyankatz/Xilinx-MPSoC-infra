@@ -1,9 +1,3 @@
-Of course. This is an excellent way to approach the task. You are demonstrating how you would think and act as a Principal Engineer by presenting a holistic, strategic solution tailored directly to the company's needs as expressed in the job description.
-
-Here is a robust project presentation designed to address all the key requirements and responsibilities of the role.
-
----
-
 ### **Project Presentation: An Automated "Glass Box" Validation Framework**
 
 **Objective:** To design and implement a comprehensive, scalable, and fully automated validation architecture for our embedded Linux products. This framework will provide deep insights into the quality of our BSP, drivers, and system software, enabling faster development cycles and delivering a more reliable product.
@@ -31,11 +25,11 @@ This directly addresses the **"Validation Architecture"** and **"CI/CD Automatio
 +----------+-----------+                  +----+------------------+---+
            |                                   | 2. Pull Code       | 3. Push Artifacts
            | 5a. Pull Test Code                v                    v
-           |                          +--------+-------+   +--------+---------+
-           |                          | Build Executor |-->| JFrog Artifactory|
-           |                          +----------------+   | - Firmware/Images|
-           |                                               | - Build Artifacts|
-           |                                               +--------+---------+
+           |                          +--------+-------+   +------------+-----------+
+           |                          | Build Executor |-->| - NFS/JFrog Artifactory|
+           |                          +----------------+   | - Firmware/Images      |
+           |                                               | - Build Artifacts      |
+           |                                               +------------+-----------+
            |                                                        | 5b. Pull Firmware
            v                                                        v
 +----------+--------------------------------------------------------+------------------+
@@ -76,8 +70,8 @@ This section details my plan for the core testing activities, addressing **"Prot
 | :--- | :--- | :--- |
 | **Boot Sequence** | **Python `pyserial`** to monitor console.<br>**Log Parsing** to validate boot chain. | • **Integrity:** FSBL → U-Boot → Kernel handoff is clean and error-free.<br>• **Performance:** Boot time is measured and tracked over time in Grafana to spot regressions.<br>• **Reliability:** Automated power-cycling (e.g., 1000 cycles) to uncover rare race conditions. |
 | **Protocol: UART** | **Pytest** with `pyserial`.<br>Console interaction and loopback testing. | • **Functionality:** Verify interactive login and command execution.<br>• **Data Integrity:** Checksum validation of large data transfers to detect corruption.<br>• **Configuration:** Test changes in baud rate, parity, etc., if applicable. |
-| **Protocol: Ethernet** | **`iperf3`**, **`ping`**, **`scapy`**. | • **Connectivity:** DHCP, static IP, link detection.<br>• **Performance:** Measure TCP/UDP throughput and latency. Track in Grafana to detect driver performance regressions.<br>• **Stress:** Long-duration `iperf` tests and packet storm generation to test driver stability. |
-| **Protocol: I2C / SPI** | Hardware fixture required (e.g., an I2C EEPROM or SPI temperature sensor connected to the DUT).<br>Python with `linux-spidev` or `smbus2`. | • **Bus Initialization:** Verify the bus is correctly enumerated by the kernel.<br>• **Device Communication:** Read the Device ID from a known peripheral.<br>• **Data Integrity:** Write a pattern to an EEPROM and read it back, verifying data is not corrupted. |
+| **Protocol: Ethernet** | **`iperf3`**, **`ping`**, **`scapy`**. | • **Connectivity:** DHCP, static IP, link detection.<br>• **Performance:** Measure TCP/UDP throughput and latency. Track in Grafana to detect driver performance regressions.<br>• **Stress:** Long-duration `iperf` tests and packet storm generation to test driver stability. 
+|**Bus Initialization:** Verify the bus is correctly enumerated by the kernel.<br>• **Device Communication:** Read the Device ID from a known peripheral.<br>• **Data Integrity:** Write a pattern to an EEPROM and read it back, verifying data is not corrupted. |
 | **Protocol: GPIO** | Hardware loopback (output pin connected to an input pin on the DUT).<br>Control via `sysfs` or `libgpiod`. | • **Direction Control:** Verify a pin can be configured as input and output.<br>• **State Toggling:** Set an output pin HIGH/LOW and assert that the corresponding input pin reads the correct state.<br>• **Interrupts:** (Advanced) Configure an input pin to generate an interrupt and verify the kernel driver handles it. |
 | **Linux System** | **`stress-ng`**, **`cyclictest`**, `LTP`.<br>Custom Python scripts. | • **Performance:** CPU, memory, and filesystem stress testing.<br>• **Real-Time:** Use `cyclictest` to measure interrupt latency and scheduling jitter if real-time performance is a requirement.<br>• **Stability:** Long-duration (24-72 hour) soak tests running a mix of workloads. |
 | **Linux Hardening** | **`lynis`**, `OpenSCAP`, custom scripts. | • **Configuration Verification:** Automate checks to ensure unnecessary services are disabled, SSH is securely configured, and file permissions on critical files (`/etc/shadow`) are correct.<br>• **Firewall Rules:** Verify default `iptables`/`nftables` rules are loaded and enforced.<br>• **Read-Only RootFS:** If applicable, verify that the root filesystem is mounted as read-only and that writes to persistent storage work as expected. |
