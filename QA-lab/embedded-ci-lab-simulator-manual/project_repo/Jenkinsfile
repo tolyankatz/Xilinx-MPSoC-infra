@@ -74,6 +74,27 @@ pipeline {
                 '''
             }
         }
+        
+        stage('Run Tests') {
+            steps {
+                echo 'Running automated test suites on Host Controller...'
+                sh '''
+                    ssh -o StrictHostKeyChecking=no jenkins@host_controller "
+                        cd /home/jenkins && . venv/bin/activate
+                        
+                        echo '=== Running Smoke Test Suite ==='
+                        python3 test_host/run_tests.py --test-suite smoke --verbose
+                        
+                        echo '=== Running Regression Test Suite ==='
+                        python3 test_host/run_tests.py --test-suite regression --verbose
+                        
+                        echo '=== Uploading Test Results to MinIO ==='
+                        mc cp test_host/test_report.html minio/artifacts/test-results-${BUILD_NUMBER}.html || echo 'No test report found'
+                        mc cp test_host/test_results.json minio/artifacts/test-results-${BUILD_NUMBER}.json || echo 'No JSON report found'
+                    "
+                '''
+            }
+        }
     }
     
     post {

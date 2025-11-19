@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from framework.boot_validator import BootValidator
 from framework.uart_test import UartTester
 from framework.ethernet_test import EthernetTester
+from framework.mock_validators import MockBootValidator, MockUartTester, MockEthernetTester
 from hardware_control.power_controller import create_power_controller, PowerState
 from hardware_control.jtag_controller import create_jtag_controller
 from reporters.prometheus_reporter import PrometheusReporter
@@ -114,9 +115,8 @@ def pytest_configure(config):
 
 def pytest_runtest_setup(item):
     """Setup actions before each test."""
-    # Skip hardware tests if in mock mode
-    if item.get_closest_marker("hardware") and item.config.getoption("--skip-hardware"):
-        pytest.skip("Skipping hardware test in mock mode")
+    # Note: We no longer skip hardware tests in mock mode - instead we run them with mock fixtures
+    pass
 
 
 @pytest.fixture(scope="session")
@@ -305,97 +305,126 @@ def jtag_controller(test_config: Dict[str, Any]):
 @pytest.fixture
 def boot_validator(test_config: Dict[str, Any]) -> Generator[BootValidator, None, None]:
     """
-    Initialize boot sequence validator with serial connection.
+    Initialize boot sequence validator with serial connection or mock.
     
     Args:
         test_config: Test configuration dictionary
         
     Yields:
-        Boot validator instance with active serial connection
+        Boot validator instance (real or mock based on skip_hardware setting)
     """
     if test_config.get('skip_hardware', False):
-        pytest.skip("Boot validator requires hardware connection")
-    
-    serial_config = test_config['hardware']['serial']
-    acceptance_criteria = test_config.get('acceptance_criteria', {})
-    
-    validator = BootValidator(
-        serial_port=serial_config['port'],
-        baud_rate=serial_config['baud_rate'],
-        timeout=serial_config.get('timeout_seconds', 300),
-        acceptance_criteria=acceptance_criteria
-    )
-    
-    try:
-        with validator:
-            logger.info("Boot validator connection established")
-            yield validator
-    except Exception as e:
-        pytest.fail(f"Failed to establish boot validator connection: {e}")
+        # Use mock validator when hardware is not available
+        logger.info("Using mock boot validator (hardware disabled)")
+        validator = MockBootValidator()
+        
+        try:
+            with validator:
+                yield validator
+        except Exception as e:
+            pytest.fail(f"Failed to initialize mock boot validator: {e}")
+    else:
+        # Use real hardware validator
+        serial_config = test_config['hardware']['serial']
+        acceptance_criteria = test_config.get('acceptance_criteria', {})
+        
+        validator = BootValidator(
+            serial_port=serial_config['port'],
+            baud_rate=serial_config['baud_rate'],
+            timeout=serial_config.get('timeout_seconds', 300),
+            acceptance_criteria=acceptance_criteria
+        )
+        
+        try:
+            with validator:
+                logger.info("Boot validator connection established")
+                yield validator
+        except Exception as e:
+            pytest.fail(f"Failed to establish boot validator connection: {e}")
 
 
 @pytest.fixture
 def uart_tester(test_config: Dict[str, Any]) -> Generator[UartTester, None, None]:
     """
-    Initialize UART tester with serial connection.
+    Initialize UART tester with serial connection or mock.
     
     Args:
         test_config: Test configuration dictionary
         
     Yields:
-        UART tester instance with active serial connection
+        UART tester instance (real or mock based on skip_hardware setting)
     """
     if test_config.get('skip_hardware', False):
-        pytest.skip("UART tester requires hardware connection")
-    
-    serial_config = test_config['hardware']['serial']
-    acceptance_criteria = test_config.get('acceptance_criteria', {})
-    
-    tester = UartTester(
-        serial_port=serial_config['port'],
-        baud_rate=serial_config['baud_rate'],
-        timeout=serial_config.get('timeout_seconds', 30),
-        acceptance_criteria=acceptance_criteria
-    )
-    
-    try:
-        with tester:
-            logger.info("UART tester connection established")
-            yield tester
-    except Exception as e:
-        pytest.fail(f"Failed to establish UART tester connection: {e}")
+        # Use mock tester when hardware is not available
+        logger.info("Using mock UART tester (hardware disabled)")
+        tester = MockUartTester()
+        
+        try:
+            with tester:
+                yield tester
+        except Exception as e:
+            pytest.fail(f"Failed to initialize mock UART tester: {e}")
+    else:
+        # Use real hardware tester
+        serial_config = test_config['hardware']['serial']
+        acceptance_criteria = test_config.get('acceptance_criteria', {})
+        
+        tester = UartTester(
+            serial_port=serial_config['port'],
+            baud_rate=serial_config['baud_rate'],
+            timeout=serial_config.get('timeout_seconds', 30),
+            acceptance_criteria=acceptance_criteria
+        )
+        
+        try:
+            with tester:
+                logger.info("UART tester connection established")
+                yield tester
+        except Exception as e:
+            pytest.fail(f"Failed to establish UART tester connection: {e}")
 
 
 @pytest.fixture
 def ethernet_tester(test_config: Dict[str, Any]) -> Generator[EthernetTester, None, None]:
     """
-    Initialize Ethernet tester with network connection.
+    Initialize Ethernet tester with network connection or mock.
     
     Args:
         test_config: Test configuration dictionary
         
     Yields:
-        Ethernet tester instance with active SSH connection
+        Ethernet tester instance (real or mock based on skip_hardware setting)
     """
     if test_config.get('skip_hardware', False):
-        pytest.skip("Ethernet tester requires hardware connection")
-    
-    network_config = test_config['hardware']['network']
-    acceptance_criteria = test_config.get('acceptance_criteria', {})
-    
-    tester = EthernetTester(
-        target_ip=network_config['target_ip'],
-        test_host_ip=network_config['test_host_ip'],
-        interface=network_config.get('interface', 'eth0'),
-        acceptance_criteria=acceptance_criteria
-    )
-    
-    try:
-        with tester:
-            logger.info("Ethernet tester connection established")
-            yield tester
-    except Exception as e:
-        pytest.fail(f"Failed to establish Ethernet tester connection: {e}")
+        # Use mock tester when hardware is not available
+        logger.info("Using mock Ethernet tester (hardware disabled)")
+        tester = MockEthernetTester()
+        
+        try:
+            with tester:
+                yield tester
+        except Exception as e:
+            pytest.fail(f"Failed to initialize mock Ethernet tester: {e}")
+    else:
+        # Use real hardware tester
+        network_config = test_config['hardware']['network']
+        acceptance_criteria = test_config.get('acceptance_criteria', {})
+        
+        tester = EthernetTester(
+            target_ip=network_config['target_ip'],
+            test_host_ip=network_config['test_host_ip'],
+            interface=network_config.get('interface', 'eth0'),
+            ssh_username=network_config.get('ssh_username', 'root'),
+            ssh_password=network_config.get('ssh_password'),
+            acceptance_criteria=acceptance_criteria
+        )
+        
+        try:
+            with tester:
+                logger.info("Ethernet tester connection established")
+                yield tester
+        except Exception as e:
+            pytest.fail(f"Failed to establish Ethernet tester connection: {e}")
 
 
 @pytest.fixture(autouse=True)

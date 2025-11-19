@@ -7,6 +7,7 @@ RUN apt-get update \
        openssh-server \
        openssh-client \
        netcat \
+       iputils-ping \
        iperf3 \
        python3 \
        python3-pip \

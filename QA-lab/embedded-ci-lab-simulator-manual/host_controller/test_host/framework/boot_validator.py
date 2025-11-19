@@ -18,6 +18,7 @@ from enum import Enum
 
 import serial
 from datetime import datetime, timedelta
+from .tcp_serial_adapter import create_serial_connection
 
 
 class BootStage(Enum):
@@ -138,18 +139,20 @@ class BootValidator:
     def __enter__(self):
         """Context manager entry - establish serial connection."""
         try:
-            self.serial_connection = serial.Serial(
+            self.serial_connection = create_serial_connection(
                 port=self.serial_port,
-                baudrate=self.baud_rate,
-                timeout=1,  # Non-blocking reads with 1s timeout
-                xonxoff=False,
-                rtscts=False,
-                dsrdtr=False
+                baud_rate=self.baud_rate,
+                timeout=1  # Non-blocking reads with 1s timeout
             )
+            
+            # Open the connection
+            if hasattr(self.serial_connection, 'open'):
+                self.serial_connection.open()
+            
             self.logger.info(f"Serial connection established: {self.serial_port}@{self.baud_rate}")
             return self
-        except serial.SerialException as e:
-            self.logger.error(f"Failed to open serial port {self.serial_port}: {e}")
+        except Exception as e:
+            self.logger.error(f"Failed to open serial connection {self.serial_port}: {e}")
             raise
             
     def __exit__(self, exc_type, exc_val, exc_tb):

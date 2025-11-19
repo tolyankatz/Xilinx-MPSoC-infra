@@ -9,11 +9,20 @@ RUN apt-get update \
        iproute2 \
        iputils-ping \
        net-tools \
+       openssh-server \
+       ethtool \
+        procps \
     && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /var/run/sshd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+    && sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+    && echo 'root:root' | chpasswd
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 23
+EXPOSE 22 23
 
 CMD ["/entrypoint.sh"]
