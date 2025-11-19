@@ -1,4 +1,4 @@
-# ZCU102 BSP Validation Monorepo
+# ZCU102 BSP Validation 
 
 ## Project Vision: "Glass Box" Validation Framework
 
