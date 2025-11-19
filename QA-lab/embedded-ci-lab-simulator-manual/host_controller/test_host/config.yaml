@@ -7,9 +7,9 @@ board_type: "zcu102"
 # Hardware Configuration
 hardware:
   
-  # Serial console configuration (mock in Docker)
+  # Serial console configuration (TCP connection to DUT simulator)
   serial:
-    port: "/dev/null"
+    port: "socket://dut_simulator:23"
     baud_rate: 115200
     timeout_seconds: 10
     read_timeout_seconds: 1
@@ -21,17 +21,18 @@ hardware:
     subnet_mask: "255.255.255.0"
     gateway: "172.18.0.1"
     interface: "eth0"
+    ssh_username: "root"
+    ssh_password: "root"
     
-  # Power control configuration (Docker-based)
+  # Power control configuration (Mock for DUT simulator)
   power:
-    controller_type: "docker"
+    controller_type: "mock"
     device_id: "dut_simulator"
-    container_name: "embedded-ci-lab-simulator-manual-dut_simulator-1"
     cycle_delay_seconds: 2
     
-  # JTAG configuration (mock)
+  # JTAG configuration (simulated)
   jtag:
-    cable_type: "mock"
+    cable_type: "platform_cable"
     device_part: "xczu9eg"
     chain_position: 1
     vivado_path: "/usr/bin/echo"
@@ -126,10 +127,10 @@ reporting:
     max_size_mb: 100
     retention_days: 7
 
-# Development and Debugging Options
+# Development and Debugging Options  
 development:
   verbose_logging: true
-  mock_hardware: true
+  mock_hardware: false
   capture_console_screenshots: false
   capture_full_uart_log: true
   fail_fast: false
